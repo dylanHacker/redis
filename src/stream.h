@@ -27,6 +27,7 @@ typedef struct stream {
  * rewriting code that also needs to iterate the stream to emit the XADD
  * commands. */
 typedef struct streamIterator {
+    stream *stream;         /* The stream we are iterating. */
     streamID master_id;     /* ID of the master entry at listpack head. */
     uint64_t master_fields_count;       /* Master entries # of fields. */
     unsigned char *master_fields_start; /* Master entries start in listpack. */
@@ -38,6 +39,7 @@ typedef struct streamIterator {
     raxIterator ri;         /* Rax iterator. */
     unsigned char *lp;      /* Current listpack. */
     unsigned char *lp_ele;  /* Current listpack cursor. */
+    unsigned char *lp_flags; /* Current entry flags pointer. */
     /* Buffers used to hold the string of lpGet() when the element is
      * integer encoded, so that there is no string representation of the
      * element inside the listpack itself. */
@@ -86,7 +88,7 @@ typedef struct streamNACK {
 
 /* Stream propagation informations, passed to functions in order to propagate
  * XCLAIM commands to AOF and slaves. */
-typedef struct sreamPropInfo {
+typedef struct streamPropInfo {
     robj *keyname;
     robj *groupname;
 } streamPropInfo;
@@ -94,17 +96,26 @@ typedef struct sreamPropInfo {
 /* Prototypes of exported APIs. */
 struct client;
 
+/* Flags for streamLookupConsumer */
+#define SLC_NONE      0
+#define SLC_NOCREAT   (1<<0) /* Do not create the consumer if it doesn't exist */
+#define SLC_NOREFRESH (1<<1) /* Do not update consumer's seen-time */
+
 stream *streamNew(void);
 void freeStream(stream *s);
+unsigned long streamLength(const robj *subject);
 size_t streamReplyWithRange(client *c, stream *s, streamID *start, streamID *end, size_t count, int rev, streamCG *group, streamConsumer *consumer, int flags, streamPropInfo *spi);
 void streamIteratorStart(streamIterator *si, stream *s, streamID *start, streamID *end, int rev);
 int streamIteratorGetID(streamIterator *si, streamID *id, int64_t *numfields);
 void streamIteratorGetField(streamIterator *si, unsigned char **fieldptr, unsigned char **valueptr, int64_t *fieldlen, int64_t *valuelen);
 void streamIteratorStop(streamIterator *si);
 streamCG *streamLookupCG(stream *s, sds groupname);
-streamConsumer *streamLookupConsumer(streamCG *cg, sds name, int create);
+streamConsumer *streamLookupConsumer(streamCG *cg, sds name, int flags);
 streamCG *streamCreateCG(stream *s, char *name, size_t namelen, streamID *id);
 streamNACK *streamCreateNACK(streamConsumer *consumer);
 void streamDecodeID(void *buf, streamID *id);
+int streamCompareID(streamID *a, streamID *b);
+void streamFreeNACK(streamNACK *na);
+void streamIncrID(streamID *id);
 
 #endif
